@@ -35,6 +35,8 @@ run code:
 - use cursors and sample rate to measure the pulse width
 - take screenshots and add them to the README below.
 
+![screenshot:](image.png)
+
 ## Measure overhead
 
 - Remove the delay statements and upload the code

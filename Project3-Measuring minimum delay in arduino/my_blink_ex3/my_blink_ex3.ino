@@ -22,7 +22,8 @@
   https://docs.arduino.cc/built-in-examples/basics/Blink/
 */
 int ledPin = 4;
-delay_time = 1000000;
+unsigned int delay_time = 1;
+
 // the setup function runs once when you press reset or power the board
 void setup() {
   // initialize digital pin ledPin as an output.
@@ -32,7 +33,7 @@ void setup() {
 // the loop function runs over and over again forever
 void loop() {
   digitalWrite(ledPin, HIGH);  // change state of the LED by setting the pin to the HIGH voltage level
-  delay(delay_time);                      // wait for a millisecond
+  delayMicroseconds(delay_time);          // wait for a microsecond
   digitalWrite(ledPin, LOW);   // change state of the LED by setting the pin to the LOW voltage level
-  delay(delay_time);                      // wait for a millisecond
+  delayMicroseconds(delay_time);          // wait for a microsecond
 }

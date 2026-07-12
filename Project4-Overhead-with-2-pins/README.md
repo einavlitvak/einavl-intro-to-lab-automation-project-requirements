@@ -13,8 +13,9 @@
 - measure the delay between the two digitalWrite() functions using the logic analyzer.
 Paste screenshots below:
 
-enter the delay in usec here:  __________
+enter the delay in usec here:  3.615 us
 
+![alt text](image.png)
 ## write a 2nd program that does the following:
 - based on the first program, add any calculation (adding one to an additional variable for example) and store the result in a variable between the two digitalWrite() functions.
 
@@ -22,12 +23,31 @@ enter the delay in usec here:  __________
 - measure the delay the originated from the calculation between the two digitalWrite() functions using the logic analyzer.
 Paste screenshots below:
 
-enter the delay in usec here:  __________
+if I add it after turning both of them to high, it doesnt change the delay
+![alt text](image-1.png)
 
+if i change it to between turning each of them to high:
+enter the delay in usec here:  4.241 us
+![alt text](image-2.png)
 ## Exercise 3
 - Use chatGPT or similar to find how to write simultaneously to both pins. Measure the delay between the pins now. 
 - Paste a screenshot below.
 - Comparison of AI changes if any:
+
+1st option:
+
+DDRB |= _BV(DDB4) | _BV(DDB5);   // pins 12 and 13 as outputs
+
+PORTB = _BV(PB4) | _BV(PB5);     // both HIGH together
+delay(1);
+PORTB = 0;                       // both LOW together
+delay(1);
+
+2nd option:
+PORTB = B00110000;  // pins 12 and 13 HIGH
+PORTB = B00000000;  // pins 12 and 13 LOW
+
+![alt text](image-3.png)
 
 ## Git
  - Comparison of AI changes if any:
