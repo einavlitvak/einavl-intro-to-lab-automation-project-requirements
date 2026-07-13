@@ -1,5 +1,4 @@
 # Project 1: Play with the Grove starter kit
-hello
 
 1. Familiarize yourself with the grove starter kit
 2. Start working with git
