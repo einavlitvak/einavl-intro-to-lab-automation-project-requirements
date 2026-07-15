@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import threading
 import time
+import traceback
 from typing import Optional
 
 from pymata4 import pymata4
@@ -94,8 +95,36 @@ class FirmataTimerApp:
         if self.window is None:
             return
 
-        current_text = self.window["-LOG-"].get()
-        self.window["-LOG-"].update(current_text + line + "\n")
+        try:
+            current_text = self.window["-LOG-"].get()
+            self.window["-LOG-"].update(current_text + line + "\n")
+        except Exception:
+            pass
+
+    def _debug(self, message: str) -> None:
+        """Write a debug breadcrumb to both the GUI log and console."""
+
+        self._append_log(f"DEBUG: {message}")
+
+    def _log_exception(self, context: str, exc: Exception) -> None:
+        """Record an exception with its traceback."""
+
+        self._append_log(f"ERROR: {context}: {exc}")
+        self._append_log(traceback.format_exc().strip())
+
+    def _post_event(self, event_name: str, payload: dict) -> None:
+        """Send an event to the GUI if the window is still alive."""
+
+        window = self.window
+        if window is None:
+            return
+
+        try:
+            window.write_event_value(event_name, payload)
+        except Exception:
+            # The GUI may already be closing while a board callback or timer
+            # thread is still running.
+            pass
 
     def _update_status_labels(self) -> None:
         """Refresh the GUI labels for button, LED, and board state."""
@@ -103,9 +132,14 @@ class FirmataTimerApp:
         if self.window is None:
             return
 
-        self.window["-BUTTON_STATE-"].update(f"Button state: {self.button_state}")
-        self.window["-LED_STATE-"].update(f"LED state: {self.led_state}")
-        self.window["-BOARD_STATE-"].update(f"Board: {self.connected_port}")
+        try:
+            self.window["-BUTTON_STATE-"].update(
+                f"Button state: {self.button_state}"
+            )
+            self.window["-LED_STATE-"].update(f"LED state: {self.led_state}")
+            self.window["-BOARD_STATE-"].update(f"Board: {self.connected_port}")
+        except Exception:
+            pass
 
     def _parse_interval(self, raw_value: str) -> Optional[int]:
         """Validate the LED interval typed into the GUI."""
@@ -123,6 +157,7 @@ class FirmataTimerApp:
     def _connect_board(self, port: str) -> None:
         """Connect to FirmataExpress and register the button callback."""
 
+        self._debug(f"_connect_board start for {port}")
         self._disconnect_board(silent=True)
 
         try:
@@ -134,6 +169,7 @@ class FirmataTimerApp:
                 BUTTON_PIN, callback=self._button_callback
             )
         except Exception as exc:  # pragma: no cover - hardware/port specific
+            self._log_exception(f"Connection failed on {port}", exc)
             self.board = None
             self.connected_port = "Disconnected"
             self._update_status_labels()
@@ -148,10 +184,12 @@ class FirmataTimerApp:
 
         self._update_status_labels()
         self._append_log(f"Connected to Arduino on {port}.")
+        self._debug(f"_connect_board finished for {port}")
 
     def _disconnect_board(self, silent: bool = False) -> None:
         """Cancel any active timer and shut down the board cleanly."""
 
+        self._debug(f"_disconnect_board start silent={silent}")
         with self.state_lock:
             if self.timer is not None:
                 self.timer.cancel()
@@ -175,6 +213,7 @@ class FirmataTimerApp:
         self._update_status_labels()
         if not silent:
             self._append_log("Board disconnected.")
+        self._debug("_disconnect_board finished")
 
     def _start_timer_locked(self) -> None:
         """Start the timer while holding the state lock."""
@@ -186,6 +225,7 @@ class FirmataTimerApp:
         timer.daemon = True
         self.timer = timer
         timer.start()
+        self._debug(f"Timer started for {self.interval_ms} ms")
 
     def _button_callback(self, data) -> None:
         """Handle digital input changes from pymata4.
@@ -195,81 +235,104 @@ class FirmataTimerApp:
         is released.
         """
 
-        _, pin_number, pin_value, timestamp = data
-        pressed = pin_value == 0
+        try:
+            self._debug(f"_button_callback raw data={data!r}")
+            _, pin_number, pin_value, timestamp = data
+            pressed = pin_value == 0
 
-        action_message = ""
-        with self.state_lock:
-            if pressed:
-                self.button_state = "Pressed"
+            action_message = ""
+            with self.state_lock:
+                if pressed:
+                    self.button_state = "Pressed"
 
-                if self.board is not None and self.led_state == "Off":
-                    self.board.digital_write(LED_PIN, 1)
-                    self.led_state = "On"
-                    self._start_timer_locked()
-                    action_message = (
-                        f"Button pressed on pin {pin_number}; LED turned on for "
-                        f"{self.interval_ms} ms."
-                    )
+                    if self.board is not None and self.led_state == "Off":
+                        self._debug("Button press accepted; turning LED on")
+                        self.board.digital_write(LED_PIN, 1)
+                        self.led_state = "On"
+                        self._start_timer_locked()
+                        action_message = (
+                            f"Button pressed on pin {pin_number}; LED turned on for "
+                            f"{self.interval_ms} ms."
+                        )
+                    else:
+                        action_message = (
+                            f"Button pressed on pin {pin_number}; LED already on, "
+                            "press ignored."
+                        )
                 else:
-                    action_message = (
-                        f"Button pressed on pin {pin_number}; LED already on, "
-                        "press ignored."
-                    )
-            else:
-                self.button_state = "Released"
-                action_message = f"Button released on pin {pin_number}."
+                    self.button_state = "Released"
+                    action_message = f"Button released on pin {pin_number}."
 
-        self.window.write_event_value(
-            "-BUTTON_EVENT-",
-            {
-                "pressed": pressed,
-                "timestamp": timestamp,
-                "message": action_message,
-            },
-        )
+            self._post_event(
+                "-BUTTON_EVENT-",
+                {
+                    "pressed": pressed,
+                    "timestamp": timestamp,
+                    "message": action_message,
+                },
+            )
+            self._debug(f"_button_callback posted event pressed={pressed}")
+        except Exception as exc:  # pragma: no cover - debug aid
+            self._log_exception("_button_callback failed", exc)
 
     def _timer_expired(self) -> None:
         """Turn the LED off after the configured delay."""
 
-        with self.state_lock:
-            if self.board is None:
-                return
+        try:
+            self._debug("_timer_expired start")
+            with self.state_lock:
+                if self.board is None:
+                    self._debug("_timer_expired aborted; board is None")
+                    return
 
-            try:
-                self.board.digital_write(LED_PIN, 0)
-            except Exception as exc:  # pragma: no cover - hardware specific
-                self.window.write_event_value(
-                    "-TIMER_EVENT-",
-                    {"message": f"Timer expired, but LED off failed: {exc}"},
-                )
+                try:
+                    self.board.digital_write(LED_PIN, 0)
+                except Exception as exc:  # pragma: no cover - hardware specific
+                    self._log_exception("Timer LED off failed", exc)
+                    self._post_event(
+                        "-TIMER_EVENT-",
+                        {"message": f"Timer expired, but LED off failed: {exc}"},
+                    )
+                    self.led_state = "Off"
+                    self.timer = None
+                    return
+
                 self.led_state = "Off"
                 self.timer = None
-                return
 
-            self.led_state = "Off"
-            self.timer = None
-
-        self.window.write_event_value(
-            "-TIMER_EVENT-",
-            {"message": "Timer expired; LED turned off."},
-        )
+            self._post_event(
+                "-TIMER_EVENT-",
+                {"message": "Timer expired; LED turned off."},
+            )
+            self._debug("_timer_expired finished")
+        except Exception as exc:  # pragma: no cover - debug aid
+            self._log_exception("_timer_expired failed", exc)
 
     def run(self) -> None:
         """Main GUI event loop."""
 
+        self._debug("GUI event loop starting")
         while True:
-            event, values = self.window.read(timeout=100)
+            try:
+                event, values = self.window.read(timeout=100)
+            except Exception:
+                self._debug("window.read failed; exiting GUI loop")
+                break
+
+            self._debug(f"GUI event received: {event!r}")
 
             if event in (sg.WIN_CLOSED, "Exit"):
+                self._debug("Exit requested")
                 break
 
             if event == "Connect":
                 port = values.get("-PORT-", DEFAULT_BOARD_PORT).strip() or DEFAULT_BOARD_PORT
+                self._debug(f"Connect button pressed for port {port}")
                 self._connect_board(port)
                 continue
 
             if event == "Disconnect":
+                self._debug("Disconnect button pressed")
                 self._disconnect_board()
                 continue
 
@@ -281,6 +344,7 @@ class FirmataTimerApp:
                     with self.state_lock:
                         self.interval_ms = interval_ms
                     self._append_log(f"Timer interval set to {interval_ms} ms.")
+                    self._debug(f"Interval updated to {interval_ms} ms")
                 continue
 
             if event == "-BUTTON_EVENT-":
@@ -289,15 +353,18 @@ class FirmataTimerApp:
                 self.button_state = state_label
                 self._update_status_labels()
                 self._append_log(info["message"])
+                self._debug(f"Processed button event: {info!r}")
                 continue
 
             if event == "-TIMER_EVENT-":
                 self.led_state = "Off"
                 self._update_status_labels()
                 self._append_log(values[event]["message"])
+                self._debug(f"Processed timer event: {values[event]!r}")
 
         self._disconnect_board(silent=True)
         self.window.close()
+        self._debug("GUI closed")
 
 
 def main() -> None:
