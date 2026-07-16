@@ -24,6 +24,7 @@ Build a system that:
 4. log the time since program start, the angle (in degrees) and the buzzer state in a csv file (where should this be done, from the Arduino or the Python code?).
 HAD ISSUES WITH PYTHON, COUKDNT FINISH THE CSV PART
 4. Record a video of the system and add to the README below (by dragging it in while pressing the `shift` key).
+<video controls src="project11_video.mp4" title="Title"></video>
 5. develop a GUI that displays the angle in a graph or compass and the buzzer state as a LED in real-time and logs the data in a csv file.
 6. Record a new video that also shows the GUI and add to the readme below
 7. Make sure to handle possible errors
