@@ -119,6 +119,9 @@ The heating pad draws far more current than USB can supply, which is exactly why
 7. Hold the heating pad at a target temperature for a sustained period despite heat loss to the surrounding air.
 8. Compare and document controller performance. Create a table for at least 3 values of Kp and Ki and document overshoot, settling time, and steady-state accuracy.
 
+### Where did I get to:
+I managed to start making the code for the controller, but only the proportional (P) part (temperature_PI_controller_DEBUG.ino). 
+
 ### Check your understanding:
 
 1. Why can't an open-loop heater controller guarantee a stable temperature if someone opens a window nearby?
